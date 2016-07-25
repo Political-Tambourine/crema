@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Http, URLSearchParams } from '@angular/http';
+import { Http, URLSearchParams, Headers, RequestOptions } from '@angular/http';
+import {Storage, LocalStorage} from 'ionic-angular';
 
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/toPromise';
@@ -12,18 +13,21 @@ import { Shop } from './shop.model';
 export class ShopService {
 
   shops: Array<any>;
+  local: Storage;
 
   constructor(private http: Http) {
-
+    this.local = new Storage(LocalStorage);
   }
 
   getShops(location?: string) {
-    console.log('SEARCH LOCATION: ', location);
     if (!location && this.shops) { return Promise.resolve(this.shops); }
 
-    return this.http.get(URL.CREMA_API + `/shops`, { search: `location=${location}` })
-      .map(res => res.json())
-      .toPromise()
+    return this.getHeadersWithAuth()
+      .then(headers => {
+        return this.http.get(URL.CREMA_API + `/shops`, { search: `location=${location}`, headers })
+          .map(res => res.json())
+          .toPromise();
+      })
       .then(data => {
         this.shops = data;
         return data;
@@ -35,9 +39,12 @@ export class ShopService {
   }
 
   submitRating(rating: number, placeId: string) {
-    return this.http.post(URL.CREMA_API + '/metrics', {rating: rating, placeID: placeId})
-      .map(res => res.json())
-      .toPromise()
+    return this.getHeadersWithAuth()
+      .then(headers => {
+        return this.http.post(URL.CREMA_API + '/metrics', { rating, placeID: placeId }, { headers })
+          .map(res => res.json())
+          .toPromise()
+      })
       .catch(err => {
         console.error('Error submitting rating: ', JSON.stringify(err));
         return Promise.reject('Error submitting rating');
@@ -65,5 +72,15 @@ export class ShopService {
     } else {
       return 'Packed';
     }
+  }
+
+  private getHeadersWithAuth() {
+    return this.local.get('jwt')
+      .then(token => {
+        console.log('Auth Token: ', token);
+        const headers = new Headers();
+        headers.append('Authorization', `JWT ${token}`);
+        return headers;
+      });
   }
 }
